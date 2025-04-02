@@ -25,7 +25,7 @@ Clone repositori ini ke komputer lokal Anda:
 ```bash
 git clone https://github.com/yogiprayoga1313/Tea-auto.git
 
-cd repository-name
+cd Tea-auto
 
 npm install
 
