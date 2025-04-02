@@ -63,13 +63,20 @@ const askForCustomAddresses = () => {
             output: process.stdout,
         });
 
-        rl.question("Masukkan daftar alamat (pisahkan dengan koma): ", (answer) => {
-            rl.close();
-            const addresses = answer.split(",").map((address) => address.trim());
-            resolve(addresses);
+        console.log("Masukkan daftar alamat satu per baris. Ketik 'done' jika sudah selesai:");
+        let addresses = [];
+
+        rl.on("line", (line) => {
+            if (line.trim().toLowerCase() === "done") {
+                rl.close();
+                resolve(addresses);
+            } else {
+                addresses.push(line.trim());
+            }
         });
     });
 };
+
 
 (async () => {
     const userChoice = await askForAmount();
