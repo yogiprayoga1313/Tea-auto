@@ -2,10 +2,12 @@ const { ethers } = require("ethers");
 require("dotenv").config();
 const readline = require("readline");
 
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const PRIVATE_KEYS = process.env.PRIVATE_KEY.split(","); 
 const TEA_RPC_URL = "https://tea-sepolia.g.alchemy.com/public";
 const provider = new ethers.JsonRpcProvider(TEA_RPC_URL);
-const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+
+// Create a wallet for each private key
+const wallets = PRIVATE_KEYS.map((privateKey) => new ethers.Wallet(privateKey.trim(), provider));
 
 const ERC20_ABI = [
     "function balanceOf(address owner) view returns (uint256)",
@@ -35,12 +37,12 @@ const getTokenDetails = async (contractAddress) => {
             throw new Error("Alamat kontrak tidak valid.");
         }
 
-        const contract = new ethers.Contract(contractAddress, ERC20_ABI, wallet);
-        
+        const contract = new ethers.Contract(contractAddress, ERC20_ABI, wallets[0]);  // Use first wallet
+
         const [symbol, decimals, balance] = await Promise.all([
             contract.symbol().catch(() => null),
             contract.decimals().catch(() => null),
-            contract.balanceOf(wallet.address).catch(() => null)
+            contract.balanceOf(wallets[0].address).catch(() => null)
         ]);
 
         if (!symbol || !decimals || balance === null) {
@@ -68,7 +70,7 @@ const generateRandomAddresses = (count) => {
 };
 
 // Fungsi untuk mengirim token
-const sendToken = async (contract, symbol, decimals, toAddress, amount) => {
+const sendToken = async (contract, symbol, decimals, toAddress, amount, wallet) => {
     try {
         if (!contract || !contract.transfer) {
             throw new Error(`Kontrak tidak memiliki metode transfer!`);
@@ -99,7 +101,7 @@ const sendToken = async (contract, symbol, decimals, toAddress, amount) => {
     const token = await getTokenDetails(contractAddress);
 
     let recipientAddresses = [];
-    let recipientOption = await askQuestion("\nMasukkan alamat tujuan (ketik 'random' untuk alamat acak): ");
+    let recipientOption = await askQuestion("\nMasukkan alamat tujuan pisah dengan spasi atau koma (ketik 'random' untuk alamat acak): ");
 
     if (recipientOption.toLowerCase() === "random") {
         const numAddresses = parseInt(await askQuestion("\nMasukkan jumlah alamat random yang ingin dibuat: "), 10);
@@ -125,11 +127,20 @@ const sendToken = async (contract, symbol, decimals, toAddress, amount) => {
             console.log(`\n📌 Menggunakan alamat tujuan: ${recipientAddresses[0]}`);
         }
     } else {
-        if (!ethers.isAddress(recipientOption)) {
-            console.error("❌ Alamat tujuan tidak valid.");
+        // Pisahkan input dengan koma atau spasi
+        const potentialAddresses = recipientOption.split(/[\s,]+/).filter(Boolean);
+
+        // Validasi semua alamat
+        const invalidAddresses = potentialAddresses.filter(addr => !ethers.isAddress(addr));
+        if (invalidAddresses.length > 0) {
+            console.error("❌ Alamat-alamat berikut tidak valid:");
+            invalidAddresses.forEach(addr => console.error(`- ${addr}`));
             process.exit(1);
         }
-        recipientAddresses = [recipientOption];
+
+        recipientAddresses = potentialAddresses;
+        console.log("\n📌 Menggunakan alamat-alamat berikut:");
+        recipientAddresses.forEach((addr, idx) => console.log(`[${idx + 1}] ${addr}`));
     }
 
     const amount = await askQuestion(`\nMasukkan jumlah ${token.symbol} yang ingin dikirim ke setiap alamat: `);
@@ -138,7 +149,10 @@ const sendToken = async (contract, symbol, decimals, toAddress, amount) => {
         process.exit(1);
     }
 
-    for (const address of recipientAddresses) {
-        await sendToken(token.contract, token.symbol, token.decimals, address, amount);
+    // Send token from all wallets
+    for (const wallet of wallets) {
+        for (const address of recipientAddresses) {
+            await sendToken(token.contract, token.symbol, token.decimals, address, amount, wallet);
+        }
     }
 })();

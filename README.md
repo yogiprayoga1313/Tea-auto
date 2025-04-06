@@ -8,6 +8,8 @@ Proyek ini adalah skrip untuk mengirimkan 0.01 TEA ke beberapa alamat Ethereum. 
 - Mengirimkan 0.01 TEA ke setiap alamat.
 - Memungkinkan pengguna untuk memasukkan daftar alamat secara manual.
 - Dapat mengirimkan token ERC-20 ke alamat-alamat yang terdaftar, menggunakan private key dari file .env.
+- Untuk Send token by user created tidak dapat multiple account (kirim token yg ada di wallet kita, bukan token TEA),
+- send token tea di index.js bisa multiple account dengan mengubah env: (PRIVATE_KEY=your privat key, your privat key).
 
 ## Persyaratan
 

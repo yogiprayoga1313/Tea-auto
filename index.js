@@ -2,17 +2,16 @@ const { ethers } = require("ethers");
 require("dotenv").config();
 const readline = require("readline");
 
-// Ambil private key dari .env
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
+// Ambil multiple private keys dari .env
+const PRIVATE_KEY = process.env.PRIVATE_KEY?.split(",").map(k => k.trim());
 const TEA_RPC_URL = "https://tea-sepolia.g.alchemy.com/public";
 
-if (!PRIVATE_KEY) {
-    console.error("Harap isi PRIVATE_KEY di file .env");
+if (!PRIVATE_KEY || PRIVATE_KEY.length === 0) {
+    console.error("❌ Harap isi PRIVATE_KEY di file .env, pisahkan dengan koma.");
     process.exit(1);
 }
 
 const provider = new ethers.JsonRpcProvider(TEA_RPC_URL);
-const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
 
 // Fungsi untuk menghasilkan alamat acak
 const generateRandomAddresses = (count) => {
@@ -24,18 +23,19 @@ const generateRandomAddresses = (count) => {
     return addresses;
 };
 
-// Fungsi untuk mengirim TEA ke daftar alamat
-const sendTea = async (addresses) => {
+// Fungsi untuk mengirim TEA dari satu wallet ke daftar alamat
+const sendTeaFromWallet = async (wallet, addresses) => {
+    console.log(`\n🧾 Mengirim dari wallet: ${wallet.address}`);
     for (let address of addresses) {
         try {
             const tx = await wallet.sendTransaction({
                 to: address,
-                value: ethers.parseEther("0.01"), // Kirim 0.01 TEA ke setiap alamat
+                value: ethers.parseEther("0.005"),
             });
-            console.log(`Mengirim 0.01 TEA ke ${address}. Tx Hash: ${tx.hash}`);
+            console.log(`✅ Mengirim 0.005 TEA ke ${address}. Tx Hash: ${tx.hash}`);
             await tx.wait();
         } catch (error) {
-            console.error(`Gagal mengirim ke ${address}:`, error);
+            console.error(`❌ Gagal mengirim ke ${address}:`, error.message);
         }
     }
 };
@@ -48,14 +48,14 @@ const askForAmount = () => {
             output: process.stdout,
         });
 
-        rl.question("Berapa jumlah alamat yang diinginkan? (atau ketik 'custom' untuk menggunakan daftar sendiri) ", (answer) => {
+        rl.question("📥 Masukkan jumlah alamat (atau ketik 'custom' untuk input manual): ", (answer) => {
             rl.close();
             resolve(answer.trim());
         });
     });
 };
 
-// Fungsi untuk meminta input daftar alamat secara manual
+// Fungsi untuk meminta input manual alamat tujuan
 const askForCustomAddresses = () => {
     return new Promise((resolve) => {
         const rl = readline.createInterface({
@@ -63,7 +63,7 @@ const askForCustomAddresses = () => {
             output: process.stdout,
         });
 
-        console.log("Masukkan daftar alamat satu per baris. Ketik 'done' jika sudah selesai:");
+        console.log("✍️ Masukkan daftar alamat satu per baris. Ketik 'done' jika selesai:");
         let addresses = [];
 
         rl.on("line", (line) => {
@@ -71,30 +71,39 @@ const askForCustomAddresses = () => {
                 rl.close();
                 resolve(addresses);
             } else {
-                addresses.push(line.trim());
+                if (ethers.isAddress(line.trim())) {
+                    addresses.push(line.trim());
+                } else {
+                    console.log("⚠️ Alamat tidak valid, coba lagi.");
+                }
             }
         });
     });
 };
 
-
+// MAIN FUNCTION
 (async () => {
     const userChoice = await askForAmount();
-
     let addresses = [];
 
     if (userChoice.toLowerCase() === "custom") {
         addresses = await askForCustomAddresses();
-        console.log("Daftar alamat yang dimasukkan:", addresses);
     } else {
         const amount = Number(userChoice);
         if (isNaN(amount) || amount <= 0) {
-            console.error("Jumlah yang dimasukkan tidak valid.");
+            console.error("❌ Jumlah tidak valid.");
             process.exit(1);
         }
         addresses = generateRandomAddresses(amount);
-        console.log(`Alamat yang dihasilkan (${amount} alamat):`, addresses);
+        console.log(`📦 ${amount} alamat acak telah dibuat:`);
+        addresses.forEach((a, i) => console.log(`[${i + 1}] ${a}`));
     }
 
-    await sendTea(addresses);
+    // Kirim dari semua wallet
+    for (let key of PRIVATE_KEY) {
+        const wallet = new ethers.Wallet(key, provider);
+        await sendTeaFromWallet(wallet, addresses);
+    }
+
+    console.log("\n🎉 Semua transaksi selesai!");
 })();
